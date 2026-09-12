@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 
 import pandas as pd
 import pytest
@@ -26,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.session import Session
 
 from superset.connectors.sqla.models import (
+    BaseDatasource,
     SqlaTable,
     SqlMetric,
     TableColumn,
@@ -46,6 +47,8 @@ from superset.models.helpers import (
     validate_rendered_expression,
 )
 from superset.sql.parse import Table
+from superset.subjects.models import Subject
+from superset.subjects.types import SubjectType
 from superset.superset_typing import AdhocMetric, QueryObjectDict
 from superset.utils import json
 
@@ -2001,3 +2004,53 @@ def test_gauge_query_restores_long_sql_metric_label(mocker: MockerFixture) -> No
         )
         is None
     )
+
+
+def test_data_exposes_editors(mocker: MockerFixture) -> None:
+    """
+    ``SqlaTable.data`` exposes the dataset editors.
+
+    Explore gates the "Edit dataset" action on ``datasource.editors``, so the
+    payload built from this property has to carry them. They are serialized with
+    the same compact subject shape the dataset REST API returns for
+    ``editors.id`` / ``editors.label`` / ``editors.type``.
+    """
+    mocker.patch.object(
+        BaseDatasource,
+        "data",
+        new_callable=PropertyMock,
+        return_value={},
+    )
+
+    dataset = SqlaTable(
+        database=Database(database_name="my_db", sqlalchemy_uri="sqlite://"),
+        table_name="my_table",
+    )
+    dataset.editors = [
+        Subject(id=1, label="alice", type=SubjectType.USER),
+        Subject(id=7, label="Alpha", type=SubjectType.ROLE),
+    ]
+
+    assert dataset.data["editors"] == [
+        {"id": 1, "label": "alice", "type": SubjectType.USER},
+        {"id": 7, "label": "Alpha", "type": SubjectType.ROLE},
+    ]
+
+
+def test_data_exposes_editors_when_empty(mocker: MockerFixture) -> None:
+    """
+    A dataset without editors reports an empty list rather than omitting the key.
+    """
+    mocker.patch.object(
+        BaseDatasource,
+        "data",
+        new_callable=PropertyMock,
+        return_value={},
+    )
+
+    dataset = SqlaTable(
+        database=Database(database_name="my_db", sqlalchemy_uri="sqlite://"),
+        table_name="my_table",
+    )
+
+    assert dataset.data["editors"] == []
