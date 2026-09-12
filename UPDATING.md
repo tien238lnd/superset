@@ -1265,7 +1265,8 @@ The Deck.gl MapBox chart's **Opacity**, **Default longitude**, **Default latitud
 
 Added a new combined datasource list endpoint at `GET /api/v1/datasource/` to serve datasets and semantic views in one response.
 
-- The endpoint is available to users with at least one of `can_read` on `Dataset` or `SemanticView`.
+- **The endpoint is gated on `can_read` on `Datasource`**, the route-level permission Flask-AppBuilder checks before the request reaches the view. This is a new permission: `superset init` grants it to the built-in Admin, Alpha and Gamma roles, but `sync_role_definitions` never touches custom roles, so add `can read on Datasource` to any custom role that should reach this endpoint or the Datasets page. Without it the request is rejected with `403` before any per-type check runs, and the Datasets page shows an error toast over an empty table.
+- Past that gate, results are narrowed by `can_read` on `Dataset` and `SemanticView`: a caller holding neither gets `403`, one holding only `can_read` on `Dataset` sees datasets, and one holding only `can_read` on `SemanticView` sees semantic views.
 - Semantic views are included only when the `SEMANTIC_LAYERS` feature flag is enabled.
 - The endpoint enforces strict `order_column` validation and returns `400` for invalid sort columns.
 
