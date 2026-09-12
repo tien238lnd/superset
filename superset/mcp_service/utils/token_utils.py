@@ -77,6 +77,12 @@ def _load_tiktoken_encoding() -> Any:
     Imported lazily so the module can be used in environments without
     tiktoken installed. The encoding is small (~1 MB) so we cache it on
     first use.
+
+    ``tiktoken.get_encoding`` fetches the BPE rank file over the network on
+    first use unless it is already present in tiktoken's on-disk cache
+    (``TIKTOKEN_CACHE_DIR``), so every failure mode here — missing encoding
+    *and* unreachable network — must degrade to the character heuristic
+    instead of propagating.
     """
     try:
         import tiktoken
@@ -91,14 +97,25 @@ def _load_tiktoken_encoding() -> Any:
 
     try:
         return tiktoken.get_encoding(_TIKTOKEN_ENCODING_NAME)
-    except (KeyError, ValueError) as exc:
-        # tiktoken installed but the requested encoding is missing — this
-        # only happens on partial installs. Treat as no tokenizer rather
-        # than crashing on every tool call.
+    except (KeyError, ValueError, OSError) as exc:
+        # KeyError/ValueError: tiktoken is installed but the requested
+        # encoding is missing or its download failed the hash check —
+        # this happens on partial installs.
+        # OSError: tiktoken had to download the BPE ranks and could not
+        # reach the network. tiktoken uses ``requests``, whose
+        # ``RequestException`` base class subclasses ``OSError``, so this
+        # covers connection refused, DNS failure, timeouts, proxy errors
+        # and non-2xx responses in deployments without outbound internet
+        # access.
+        # Either way, treat it as no tokenizer rather than crashing the
+        # whole MCP service, which imports this module at startup.
         logger.warning(
-            "tiktoken encoding '%s' unavailable: %s; falling back to "
-            "char-based token estimation",
+            "tiktoken encoding '%s' unavailable (%s: %s); falling back to "
+            "char-based token estimation. To use tiktoken without outbound "
+            "internet access, pre-populate tiktoken's cache and set "
+            "TIKTOKEN_CACHE_DIR.",
             _TIKTOKEN_ENCODING_NAME,
+            type(exc).__name__,
             exc,
         )
         return None

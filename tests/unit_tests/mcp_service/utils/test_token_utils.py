@@ -19,13 +19,17 @@
 Unit tests for MCP service token utilities.
 """
 
+import sys
 from typing import Any, List
 from unittest.mock import patch
 
+import pytest
+import requests
 from pydantic import BaseModel
 
 from superset.mcp_service.utils import token_utils
 from superset.mcp_service.utils.token_utils import (
+    _load_tiktoken_encoding,
     _replace_collections_with_summaries,
     _summarize_large_dicts,
     _truncate_lists,
@@ -852,3 +856,64 @@ class TestTruncateQueryResult:
         response = self._rows_response("rows")
         _, _, notes = truncate_query_result(response, 500, tool_name="execute_sql")
         assert any("LIMIT clause" in n for n in notes)
+
+
+class _FakeTiktoken:
+    """Stand-in for the ``tiktoken`` module, so these tests exercise the
+    error handling whether or not tiktoken is installed."""
+
+    def __init__(self, result: Any = None, exc: BaseException | None = None) -> None:
+        self._result = result
+        self._exc = exc
+
+    def get_encoding(self, name: str) -> Any:
+        if self._exc is not None:
+            raise self._exc
+        return self._result
+
+
+class TestLoadTiktokenEncoding:
+    """Test _load_tiktoken_encoding degrades instead of raising.
+
+    The module caches ``_ENCODING = _load_tiktoken_encoding()`` at import
+    time and the MCP server imports this module at startup, so anything
+    escaping this function takes down the whole service rather than
+    degrading a single tool call.
+    """
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            # tiktoken downloads the BPE ranks over HTTP on first use via
+            # ``requests``; every RequestException subclasses OSError.
+            requests.exceptions.ConnectionError("connection refused"),
+            requests.exceptions.ProxyError("unable to connect to proxy"),
+            requests.exceptions.Timeout("timed out"),
+            requests.exceptions.HTTPError("403 Forbidden"),
+            # Partial installs / corrupted download.
+            KeyError("cl100k_base"),
+            ValueError("hash mismatch"),
+        ],
+    )
+    def test_returns_none_instead_of_raising(self, exc: BaseException) -> None:
+        """Any download or lookup failure yields None, never propagates."""
+        with patch.dict(sys.modules, {"tiktoken": _FakeTiktoken(exc=exc)}):
+            assert _load_tiktoken_encoding() is None
+
+    def test_network_errors_are_oserrors(self) -> None:
+        """Guard the assumption the except clause relies on: requests'
+        exception hierarchy is rooted at OSError, so catching OSError
+        covers DNS failures, refused connections, timeouts and proxy
+        errors in deployments without outbound internet access."""
+        assert issubclass(requests.exceptions.RequestException, OSError)
+
+    def test_missing_tiktoken_returns_none(self) -> None:
+        """An environment without tiktoken installed falls back quietly."""
+        with patch.dict(sys.modules, {"tiktoken": None}):
+            assert _load_tiktoken_encoding() is None
+
+    def test_returns_encoding_when_available(self) -> None:
+        """The happy path still returns the encoding object."""
+        sentinel = object()
+        with patch.dict(sys.modules, {"tiktoken": _FakeTiktoken(result=sentinel)}):
+            assert _load_tiktoken_encoding() is sentinel
