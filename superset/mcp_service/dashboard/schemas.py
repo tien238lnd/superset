@@ -1298,7 +1298,7 @@ class ManageDashboardRolesResponse(DashboardMutationErrorFields):
     )
 
 
-class ManageDashboardCertificationRequest(BaseModel):
+class ManageDashboardCertificationRequest(OmittedMeansUnchanged):
     """Request schema for setting or clearing dashboard certification.
 
     ``certified_by`` and ``certification_details`` are independent optional
@@ -2341,7 +2341,7 @@ NewNativeFilterSpec = Annotated[
 ]
 
 
-class NativeFilterUpdateSpec(BaseModel):
+class NativeFilterUpdateSpec(OmittedMeansUnchanged):
     """Partial update for an existing native filter.
 
     Only ``id`` is required; any other provided field is merged into the

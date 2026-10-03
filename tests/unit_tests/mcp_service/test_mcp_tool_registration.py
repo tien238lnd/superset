@@ -369,6 +369,50 @@ def test_omitted_means_unchanged_models_advertise_no_null_default() -> None:
     )
 
 
+# Request parts that patch stored state outside OMITTED_MEANS_UNCHANGED_TOOLS.
+# The path leads from the request schema to the part whose fields are merged
+# into an existing object. manage_native_filters is listed by its ``update``
+# items only: ``reorder`` is a call option, and the ``add`` items create new
+# filters, where the defaults are real.
+PARTIAL_UPDATE_SCHEMA_PARTS = {
+    "manage_dashboard_certification": (),
+    "manage_native_filters": ("properties", "update", "items"),
+}
+
+
+def test_partial_update_schema_parts_advertise_no_null_default() -> None:
+    """Fields that patch stored state outside the update_* tools offer no null
+    default either.
+
+    The subclass walk above cannot notice one of these models losing the base,
+    because it only sees the models that still have it. Pinning the schema part
+    by tool and path fails instead.
+    """
+    registered = {tool.name: tool for tool in _run(mcp.list_tools())}
+    advertised = {}
+    for name, path in PARTIAL_UPDATE_SCHEMA_PARTS.items():
+        tool: Any = registered.get(name)
+        if tool is None:
+            raise AssertionError(
+                f"{name} is not registered, so its schema cannot be checked"
+            )
+        part: Any = _request_model_schema(tool)
+        for key in path:
+            part = part[key]
+        if "properties" not in part:
+            raise AssertionError(
+                f"{name}: {'/'.join(path)} is not an object schema; "
+                "the null-default check below would silently pass"
+            )
+        if offenders := _null_defaults(part):
+            advertised[name] = offenders
+
+    assert not advertised, (
+        "Partial-update fields must not advertise null defaults, or a client "
+        f"filling them sends values the caller never named: {advertised}"
+    )
+
+
 def test_mcp_app_imports_successfully():
     """Test that the MCP app can be imported without errors."""
     assert mcp is not None
