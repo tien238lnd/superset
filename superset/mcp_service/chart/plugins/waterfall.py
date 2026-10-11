@@ -41,6 +41,21 @@ class WaterfallChartPlugin(BaseChartPlugin):
     native_viz_types: ClassVar[Mapping[str, str]] = {
         "waterfall": "Waterfall Chart",
     }
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "x_axis": ("x_axis", "granularity_sqla"),
+        "metric": ("metric",),
+        "breakdown": ("groupby",),
+        "time_grain": ("time_grain_sqla", "granularity_sqla"),
+        "show_total": ("show_total",),
+        "show_legend": ("show_legend",),
+        "increase_label": ("increase_label",),
+        "decrease_label": ("decrease_label",),
+        "total_label": ("total_label",),
+        "x_axis_time_format": ("x_axis_time_format",),
+        "y_axis_format": ("y_axis_format",),
+        "currency_format": ("currency_format",),
+        "row_limit": ("row_limit",),
+    }
 
     def pre_validate(
         self,

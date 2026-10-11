@@ -41,6 +41,20 @@ class PivotTableChartPlugin(BaseChartPlugin):
     native_viz_types: ClassVar[Mapping[str, str]] = {
         "pivot_table_v2": "Pivot Table",
     }
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "rows": ("groupbyRows",),
+        "columns": ("groupbyColumns",),
+        "metrics": ("metrics",),
+        "aggregate_function": ("aggregateFunction",),
+        "show_row_totals": ("rowTotals",),
+        "show_column_totals": ("colTotals",),
+        "transpose": ("transposePivot",),
+        "combine_metric": ("combineMetric",),
+        "row_limit": ("row_limit",),
+        "value_format": ("valueFormat",),
+        "date_format": ("date_format",),
+        "currency_format": ("currency_format",),
+    }
 
     def pre_validate(
         self,

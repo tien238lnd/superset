@@ -157,9 +157,7 @@ def _append_table_columns(
     if saved_plugin is None or not saved_plugin.supports_column_append:
         return _validation_error_response(
             message="'add_columns' is only supported for table charts.",
-            details=(
-                "Use 'config' to replace the full configuration of a non-table chart."
-            ),
+            details="Use 'config' to change a non-table chart.",
         )
 
     merged = dict(existing_form_data)
@@ -729,6 +727,9 @@ async def update_chart(  # noqa: C901
     - LLM clients MUST display the returned explore URL to users.
     - Use numeric ID or UUID string to identify the chart (NOT chart name).
     - config is optional — omit it to rename a chart without changing its visualization
+    - config changes only the fields it names; omitted fields keep their saved
+      values. The chart_type's required fields must still be sent. A config of
+      another chart_type replaces the chart's configuration.
     - To append table columns without restating the existing list, use add_columns
 
     Example usage (preview, default):

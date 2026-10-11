@@ -125,6 +125,29 @@ class InteractivePivotChartPlugin(BaseChartPlugin):
     native_viz_types: ClassVar[Mapping[str, str]] = {
         "ag-grid-pivot-table": "Interactive Pivot Table",
     }
+    # pivot_table_state is merged by merge_interactive_pivot_ui_config.
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "rows": ("groupby",),
+        "columns": ("groupby",),
+        "metrics": ("metrics",),
+        "time_grain": ("time_grain_sqla",),
+        "series_limit": ("series_limit",),
+        "series_limit_metric": ("series_limit_metric",),
+        "sort_descending": ("order_desc",),
+        "row_limit": ("row_limit",),
+        "show_row_group_counts": ("rowGroupCounts",),
+        "show_row_totals": ("rowTotals",),
+        "show_column_totals": ("colTotals",),
+        "show_column_subtotals": ("colSubTotals",),
+        "value_format": ("valueFormat",),
+        "date_format": ("date_format",),
+        "currency_format": ("currency_format",),
+        "column_sort": ("colOrder",),
+        "allow_render_html": ("allow_render_html",),
+        "expand_pivot_groups": ("expand_pivot_groups",),
+        "comparison_period": ("time_compare", "comparison_type"),
+        "comparison_type": ("time_compare", "comparison_type"),
+    }
 
     def is_available(self) -> bool:
         """Hide the adapter unless the host ships and enables the visualization."""

@@ -144,6 +144,8 @@ def update_chart_preview(  # noqa: C901
     IMPORTANT:
     - Modifies cached form_data from generate_chart (save_chart=False)
     - Original form_data_key (when provided) is invalidated, new one returned
+    - With form_data_key, config changes only the fields it names; omitted
+      fields keep the cached values
     - LLM clients MUST display explore_url to users
 
     Use when:

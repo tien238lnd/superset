@@ -28,7 +28,7 @@ from superset.mcp_service.chart.chart_utils import (
     _xy_chart_what,
     map_xy_config,
 )
-from superset.mcp_service.chart.plugin import BaseChartPlugin
+from superset.mcp_service.chart.plugin import BaseChartPlugin, fill_omitted_fields
 from superset.mcp_service.chart.schemas import ColumnRef, XYChartConfig
 from superset.mcp_service.chart.validation.dataset_validator import DatasetValidator
 from superset.mcp_service.chart.validation.runtime.cardinality_validator import (
@@ -41,6 +41,14 @@ from superset.mcp_service.common.error_schemas import ChartGenerationError
 
 logger = logging.getLogger(__name__)
 
+_VIZ_TYPE_BY_KIND = {
+    "line": "echarts_timeseries_line",
+    "bar": "echarts_timeseries_bar",
+    "area": "echarts_area",
+    "scatter": "echarts_timeseries_scatter",
+}
+_KIND_BY_VIZ_TYPE = {viz_type: kind for kind, viz_type in _VIZ_TYPE_BY_KIND.items()}
+
 
 class XYChartPlugin(BaseChartPlugin):
     """Plugin for xy chart type (line, bar, area, scatter)."""
@@ -52,6 +60,35 @@ class XYChartPlugin(BaseChartPlugin):
         "echarts_timeseries_bar": "Bar Chart",
         "echarts_area": "Area Chart",
         "echarts_timeseries_scatter": "Scatter Plot",
+    }
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "x": (
+            "x_axis",
+            "granularity_sqla",
+            "time_grain_sqla",
+            "x_axis_sort_series_type",
+            "x_axis_sort_series_ascending",
+        ),
+        "y": ("metrics",),
+        "kind": ("viz_type",),
+        "time_grain": ("time_grain_sqla",),
+        "orientation": ("orientation",),
+        "stacked": ("stack",),
+        "group_by": ("groupby",),
+        "x_axis.title": ("x_axis_title",),
+        "x_axis.format": ("x_axis_format",),
+        "y_axis.title": ("y_axis_title",),
+        "y_axis.format": ("y_axis_format",),
+        "y_axis.scale": ("y_axis_scale",),
+        "legend.show": ("show_legend",),
+        "legend.position": ("legendOrientation",),
+        "legend_orientation": ("legendOrientation",),
+        "x_axis_time_format": ("x_axis_time_format",),
+        "show_value": ("show_value",),
+        "currency_format": ("currency_format",),
+        "color_scheme": ("color_scheme",),
+        "row_limit": ("row_limit",),
+        "series_limit": ("series_limit",),
     }
 
     def pre_validate(
@@ -139,12 +176,20 @@ class XYChartPlugin(BaseChartPlugin):
 
     def resolve_viz_type(self, config: Any) -> str:
         kind = getattr(config, "kind", "line")
-        return {
-            "line": "echarts_timeseries_line",
-            "bar": "echarts_timeseries_bar",
-            "area": "echarts_area",
-            "scatter": "echarts_timeseries_scatter",
-        }.get(kind, "echarts_timeseries_line")
+        return _VIZ_TYPE_BY_KIND.get(kind, "echarts_timeseries_line")
+
+    def resolve_update_config(
+        self,
+        config: Any,
+        existing_form_data: dict[str, Any],
+        *,
+        dataset_rebind: bool,
+    ) -> Any:
+        """Keep the saved line, bar, area or scatter when kind is omitted."""
+        viz_type = existing_form_data.get("viz_type")
+        if isinstance(viz_type, str) and (kind := _KIND_BY_VIZ_TYPE.get(viz_type)):
+            return fill_omitted_fields(config, {"kind": kind})
+        return config
 
     def get_runtime_warnings(
         self, config: Any, dataset_id: int | str

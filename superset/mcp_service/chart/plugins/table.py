@@ -27,7 +27,7 @@ from superset.mcp_service.chart.chart_utils import (
     _table_chart_what,
     map_table_config,
 )
-from superset.mcp_service.chart.plugin import BaseChartPlugin
+from superset.mcp_service.chart.plugin import BaseChartPlugin, fill_omitted_fields
 from superset.mcp_service.chart.schemas import ColumnRef, TableChartConfig
 from superset.mcp_service.chart.validation.dataset_validator import DatasetValidator
 from superset.mcp_service.common.error_schemas import ChartGenerationError
@@ -43,6 +43,32 @@ class TableChartPlugin(BaseChartPlugin):
         "ag-grid-table": "Interactive Table",
     }
     supports_column_append = True
+    # groupby and metrics are left to the shared merge: a saved value the new
+    # query mode does not write survives, as an inherited query role does.
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "viz_type": ("viz_type",),
+        "query_mode": ("query_mode",),
+        "columns": ("all_columns", "columns", "query_mode"),
+        "sort_by": ("order_by_cols",),
+        "row_limit": ("row_limit",),
+        "color_scheme": ("color_scheme",),
+    }
+    update_form_data_exempt: ClassVar[Mapping[str, str]] = {
+        "column_config": "merge_table_column_config merges it label by label.",
+    }
+
+    def resolve_update_config(
+        self,
+        config: Any,
+        existing_form_data: dict[str, Any],
+        *,
+        dataset_rebind: bool,
+    ) -> Any:
+        """Keep the saved table or interactive table when viz_type is omitted."""
+        saved_viz_type = existing_form_data.get("viz_type")
+        if saved_viz_type in self.native_viz_types:
+            return fill_omitted_fields(config, {"viz_type": saved_viz_type})
+        return config
 
     def pre_validate(
         self,

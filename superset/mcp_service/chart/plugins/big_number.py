@@ -28,7 +28,7 @@ from superset.mcp_service.chart.chart_utils import (
     is_column_truly_temporal,
     map_big_number_config,
 )
-from superset.mcp_service.chart.plugin import BaseChartPlugin
+from superset.mcp_service.chart.plugin import BaseChartPlugin, fill_omitted_fields
 from superset.mcp_service.chart.schemas import BigNumberChartConfig, ColumnRef
 from superset.mcp_service.chart.validation.dataset_validator import DatasetValidator
 from superset.mcp_service.common.error_schemas import ChartGenerationError
@@ -42,6 +42,22 @@ class BigNumberChartPlugin(BaseChartPlugin):
     native_viz_types: ClassVar[Mapping[str, str]] = {
         "big_number": "Big Number with Trendline",
         "big_number_total": "Big Number",
+    }
+    # resolve_update_config fills an omitted show_trendline from the saved
+    # chart and marks it set, so its entry lists only the keys the filled value
+    # writes back unchanged. The trendline options follow their own fields.
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "metric": ("metric",),
+        "show_trendline": ("show_trend_line", "granularity_sqla"),
+        "time_grain": ("time_grain_sqla",),
+        "subheader": ("subheader",),
+        "y_axis_format": ("y_axis_format",),
+        "time_format": ("time_format",),
+        "currency_format": ("currency_format",),
+        "color_scheme": ("color_scheme",),
+        "start_y_axis_at_zero": ("start_y_axis_at_zero",),
+        "compare_lag": ("compare_lag",),
+        "aggregation": ("aggregation",),
     }
     TRENDLINE_VIZ_TYPE = "big_number"
     # Period-over-period KPIs share the singular-metric query contract.
@@ -200,6 +216,29 @@ class BigNumberChartPlugin(BaseChartPlugin):
         what = _big_number_chart_what(config)
         context = _summarize_filters(getattr(config, "filters", None))
         return self._with_context(what, context)
+
+    def resolve_update_config(
+        self,
+        config: Any,
+        existing_form_data: dict[str, Any],
+        *,
+        dataset_rebind: bool,
+    ) -> Any:
+        """Keep a saved trendline when show_trendline is omitted.
+
+        The trendline needs its temporal column, so an omitted temporal_column
+        comes from the saved chart too. A dataset rebind fills neither: the
+        saved column belongs to the old dataset.
+        """
+        if dataset_rebind or existing_form_data.get("viz_type") != "big_number":
+            return config
+        if "show_trendline" in config.model_fields_set and not config.show_trendline:
+            return config
+        values: dict[str, Any] = {"show_trendline": True}
+        granularity = existing_form_data.get("granularity_sqla")
+        if isinstance(granularity, str) and granularity:
+            values["temporal_column"] = granularity
+        return fill_omitted_fields(config, values)
 
     def resolve_viz_type(self, config: Any) -> str:
         show_trendline = getattr(config, "show_trendline", False)

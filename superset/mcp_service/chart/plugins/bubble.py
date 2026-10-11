@@ -47,6 +47,15 @@ class BubbleChartPlugin(BaseChartPlugin):
     native_viz_types: ClassVar[Mapping[str, str]] = {
         "bubble_v2": "Bubble Chart",
     }
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "entity": ("entity",),
+        "x": ("x",),
+        "y": ("y",),
+        "size": ("size",),
+        "series": ("series",),
+        "row_limit": ("row_limit",),
+        "color_scheme": ("color_scheme",),
+    }
     # Legacy saved Bubble charts share the x/y/size metric roles.
     additional_viz_types = frozenset({"bubble"})
 

@@ -50,6 +50,14 @@ class HistogramChartPlugin(BaseChartPlugin):
     native_viz_types: ClassVar[Mapping[str, str]] = {
         "histogram_v2": "Histogram",
     }
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "column": ("column",),
+        "groupby": ("groupby",),
+        "bins": ("bins",),
+        "normalize": ("normalize",),
+        "cumulative": ("cumulative",),
+        "row_limit": ("row_limit",),
+    }
 
     def pre_validate(
         self,

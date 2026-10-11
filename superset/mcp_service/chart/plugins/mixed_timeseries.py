@@ -41,6 +41,37 @@ class MixedTimeseriesChartPlugin(BaseChartPlugin):
     native_viz_types: ClassVar[Mapping[str, str]] = {
         "mixed_timeseries": "Mixed Timeseries Chart",
     }
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "x": (
+            "x_axis",
+            "granularity_sqla",
+            "time_grain_sqla",
+            "x_axis_sort_series_type",
+            "x_axis_sort_series_ascending",
+        ),
+        "time_grain": ("time_grain_sqla",),
+        "y": ("metrics",),
+        "primary_kind": ("seriesType", "area"),
+        "group_by": ("groupby",),
+        "y_secondary": ("metrics_b",),
+        "secondary_kind": ("seriesTypeB", "areaB"),
+        "group_by_secondary": ("groupby_b",),
+        "show_legend": ("show_legend",),
+        "legend_orientation": ("legendOrientation",),
+        "show_value": ("show_value",),
+        "x_axis.title": ("xAxisTitle",),
+        "x_axis.format": ("x_axis_time_format",),
+        "y_axis.title": ("yAxisTitle",),
+        "y_axis.format": ("y_axis_format",),
+        "y_axis.scale": ("logAxis",),
+        "y_axis_secondary.title": ("yAxisTitleSecondary",),
+        "y_axis_secondary.format": ("y_axis_format_secondary",),
+        "y_axis_secondary.scale": ("logAxisSecondary",),
+        "color_scheme": ("color_scheme",),
+        "currency_format": ("currency_format",),
+        "currency_format_secondary": ("currency_format_secondary",),
+        "row_limit": ("row_limit",),
+    }
 
     def pre_validate(
         self,

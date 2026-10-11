@@ -980,18 +980,29 @@ def merge_chart_form_data(
     *,
     dataset_rebind: bool = False,
 ) -> dict[str, Any]:
-    """Merge update form_data while preserving omitted same-viz controls.
+    """Merge update form_data while preserving omitted controls.
 
-    A viz-type change never inherits old controls. Dataset rebinds similarly
-    drop query roles and filters; Gauge presentation controls remain safe to
-    preserve because they do not reference the old dataset.
+    A change of chart type never inherits old controls: a config of another
+    chart type describes a different chart and replaces the saved one. A viz
+    change inside one chart type (xy ``kind``, table ``viz_type``, big number
+    ``show_trendline``) is an ordinary field update and keeps everything the
+    caller did not name. Dataset rebinds similarly drop query roles and
+    filters; Gauge presentation controls remain safe to preserve because they
+    do not reference the old dataset.
     """
-    if existing_form_data.get("viz_type") != new_form_data.get("viz_type"):
-        return dict(new_form_data)
     # Loading the registry at module scope cycles through plugin imports.
     from superset.mcp_service.chart.registry import plugin_for_viz_type
 
-    if (plugin := plugin_for_viz_type(new_form_data.get("viz_type"))) is not None:
+    plugin = plugin_for_viz_type(new_form_data.get("viz_type"))
+    if existing_form_data.get("viz_type") != new_form_data.get("viz_type"):
+        saved_plugin = plugin_for_viz_type(existing_form_data.get("viz_type"))
+        if (
+            plugin is None
+            or saved_plugin is None
+            or saved_plugin.chart_type != plugin.chart_type
+        ):
+            return dict(new_form_data)
+    if plugin is not None:
         plugin_merged = plugin.merge_update_form_data(
             existing_form_data,
             new_form_data,
@@ -1031,6 +1042,78 @@ def _merge_shared_form_data(
         if config_field in fields_set and getattr(config, config_field, None) == []:
             merged.pop(form_data_field, None)
     return merged
+
+
+def _config_path_is_set(config: Any, path: str) -> bool:
+    """Return whether the caller named ``path``, a dotted config field path.
+
+    A parent the caller set to null counts as naming every field under it.
+    """
+    node = config
+    for part in path.split("."):
+        if node is None:
+            return True
+        if part not in getattr(node, "model_fields_set", ()):
+            return False
+        node = getattr(node, part)
+    return True
+
+
+def keep_omitted_form_data(
+    merged: dict[str, Any],
+    existing_form_data: Mapping[str, Any],
+    new_form_data: Mapping[str, Any],
+    config: Any,
+    form_data_keys: Mapping[str, tuple[str, ...]],
+) -> dict[str, Any]:
+    """Apply a plugin's config-to-form_data table to a merged update.
+
+    ``form_data_keys`` maps each config field path to the form_data keys it
+    writes. A key follows the caller as soon as any field that writes it is
+    named: it takes the mapped value, or is dropped when the mapping no
+    longer writes it (an explicit null, or a value that writes nothing). A
+    key no named field writes keeps its saved value. When the saved chart
+    has no value for it, the mapped default stays, as for a new chart.
+    """
+    paths_by_key: dict[str, list[str]] = {}
+    for path, keys in form_data_keys.items():
+        for key in keys:
+            paths_by_key.setdefault(key, []).append(path)
+    for key, paths in paths_by_key.items():
+        if any(_config_path_is_set(config, path) for path in paths):
+            if key not in new_form_data:
+                merged.pop(key, None)
+        elif key in existing_form_data:
+            merged[key] = existing_form_data[key]
+    return merged
+
+
+def merge_declared_form_data(
+    existing_form_data: dict[str, Any],
+    new_form_data: dict[str, Any],
+    config: Any,
+    form_data_keys: Mapping[str, tuple[str, ...]],
+) -> dict[str, Any]:
+    """Merge a same-chart-type update, keeping every control not named.
+
+    The shared merge handles filters and explicitly empty collections; the
+    plugin's table then decides, key by key, between the saved value and the
+    mapped one.
+    """
+    merged = _merge_shared_form_data(existing_form_data, new_form_data, config)
+    # An explicit null clears the saved filters, keeping only the time-range
+    # filter the mapper generates for the new config.
+    if (
+        "filters" in config.model_fields_set
+        and getattr(config, "filters", None) is None
+    ):
+        if "adhoc_filters" in new_form_data:
+            merged["adhoc_filters"] = new_form_data["adhoc_filters"]
+        else:
+            merged.pop("adhoc_filters", None)
+    return keep_omitted_form_data(
+        merged, existing_form_data, new_form_data, config, form_data_keys
+    )
 
 
 def merge_gantt_update_form_data(

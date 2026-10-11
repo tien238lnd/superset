@@ -46,6 +46,41 @@ def capped_compile_row_limit(form_data: Mapping[str, Any], cap: int = 10) -> int
     return min(cap, limit) if limit > 0 else cap
 
 
+#: Config fields every chart type merges outside ``update_form_data_keys``.
+SHARED_UPDATE_FIELDS: Mapping[str, str] = {
+    "chart_type": "Selects the plugin; a different chart type replaces the chart.",
+    "filters": (
+        "The shared merge keeps the saved filters when omitted and replaces "
+        "them when named."
+    ),
+    "temporal_column": (
+        "Rebuilt with the filters: it names the dashboard time binding, which "
+        "the mapper writes into adhoc_filters."
+    ),
+}
+
+
+def fill_omitted_fields(config: Any, values: Mapping[str, Any]) -> Any:
+    """Return ``config`` with ``values`` for the fields the caller omitted.
+
+    Used by ``resolve_update_config`` for fields whose model default would
+    pick another viz type than the saved chart's. The filled fields count as
+    set, so column normalization, which rebuilds the config from its set
+    fields, keeps them. Each holds the saved value, so the update merge
+    writes back what the chart already has.
+    """
+    update = {
+        name: value
+        for name, value in values.items()
+        if name not in config.model_fields_set
+    }
+    if not update:
+        return config
+    filled = config.model_copy(update=update)
+    filled.__pydantic_fields_set__ = set(config.model_fields_set) | set(update)
+    return filled
+
+
 @runtime_checkable
 class ChartTypePlugin(Protocol):
     """
@@ -247,6 +282,16 @@ class ChartTypePlugin(Protocol):
     invalid_result_error_code: ClassVar[str]
     invalid_result_message: ClassVar[str]
 
+    #: The form_data keys each config field writes, keyed by field path (a
+    #: dotted path reaches into a nested model). The default
+    #: ``merge_update_form_data`` keeps the saved value of every key that no
+    #: named field writes, so an update changes only what the caller names.
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]]
+
+    #: Config fields left out of ``update_form_data_keys``, each with the
+    #: reason; a unit test requires every config field in one of the two.
+    update_form_data_exempt: ClassVar[Mapping[str, str]]
+
     def resolve_query_fields(
         self, form_data: Mapping[str, Any], viz_type: str
     ) -> tuple[list[Any], list[Any]] | None:
@@ -353,6 +398,8 @@ class BaseChartPlugin:
     preview_note: ClassVar[str | None] = None
     invalid_result_error_code: ClassVar[str] = "INVALID_CHART_RESULT"
     invalid_result_message: ClassVar[str] = "Chart query returned invalid values"
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {}
+    update_form_data_exempt: ClassVar[Mapping[str, str]] = {}
 
     def is_available(self) -> bool:
         """Return whether the host deployment provides this visualization."""
@@ -466,7 +513,17 @@ class BaseChartPlugin:
         *,
         dataset_rebind: bool,
     ) -> dict[str, Any] | None:
-        return None
+        if dataset_rebind:
+            return None
+        # chart_utils imports the plugin registry, so import it on use.
+        from superset.mcp_service.chart.chart_utils import merge_declared_form_data
+
+        return merge_declared_form_data(
+            existing_form_data,
+            new_form_data,
+            config,
+            self.update_form_data_keys,
+        )
 
     def validate_merged_form_data(
         self,

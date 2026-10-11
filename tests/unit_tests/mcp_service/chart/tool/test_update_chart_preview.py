@@ -183,6 +183,67 @@ def test_cached_gauge_update_preserves_controls_and_compiles(
     ] == ["Last week"]
 
 
+@patch.object(
+    update_chart_preview_module,
+    "event_logger",
+    new=Mock(log_context=lambda **kwargs: nullcontext()),
+)
+@patch.object(update_chart_preview_module, "validate_and_compile")
+@patch.object(update_chart_preview_module, "has_dataset_access", return_value=True)
+@patch("superset.daos.dataset.DatasetDAO.find_by_id")
+@patch.object(update_chart_preview_module, "analyze_chart_semantics")
+@patch.object(update_chart_preview_module, "analyze_chart_capabilities")
+@patch.object(update_chart_preview_module, "generate_explore_link")
+@patch.object(update_chart_preview_module, "_get_previous_form_data")
+@patch.object(update_chart_preview_module, "_find_dataset")
+def test_cached_ag_grid_table_keeps_viz_type_and_controls(
+    mock_find_dataset,
+    mock_get_previous_form_data,
+    mock_generate_explore_link,
+    mock_capabilities,
+    mock_semantics,
+    mock_find_by_id,
+    unused_access_mock,
+    mock_validate_and_compile,
+    mock_auth,
+) -> None:
+    """A table config that omits viz_type keeps the cached interactive table."""
+    mock_find_dataset.return_value = _mock_dataset(id=3)
+    mock_find_by_id.return_value = _mock_dataset(id=3)
+    mock_get_previous_form_data.return_value = {
+        "viz_type": "ag-grid-table",
+        "datasource": "3__table",
+        "query_mode": "raw",
+        "all_columns": ["ds"],
+        "columns": ["ds"],
+        "row_limit": 50,
+        "color_scheme": "lyftColors",
+        "page_length": 25,
+    }
+    mock_generate_explore_link.return_value = (
+        "http://localhost:8088/explore/?form_data_key=new_key"
+    )
+    mock_capabilities.return_value = None
+    mock_semantics.return_value = None
+    mock_validate_and_compile.return_value = Mock(success=True, warnings=[])
+    request = UpdateChartPreviewRequest(
+        form_data_key="old_key",
+        dataset_id=3,
+        config=TableChartConfig(columns=[ColumnRef(name="ds")], row_limit=80),
+    )
+
+    result = asyncio.run(
+        update_chart_preview_module.update_chart_preview(request=request, ctx=Mock())
+    )
+
+    assert result["success"] is True, result
+    generated = mock_generate_explore_link.call_args.args[1]
+    assert generated["viz_type"] == "ag-grid-table"
+    assert generated["page_length"] == 25
+    assert generated["color_scheme"] == "lyftColors"
+    assert generated["row_limit"] == 80
+
+
 class TestUpdateChartPreview:
     """Tests for update_chart_preview MCP tool."""
 

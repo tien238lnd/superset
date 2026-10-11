@@ -45,6 +45,16 @@ class HandlebarsChartPlugin(BaseChartPlugin):
         "Handlebars charts use browser-side template rendering; "
         "this preview shows the raw underlying data, not the rendered template"
     )
+    update_form_data_keys: ClassVar[Mapping[str, tuple[str, ...]]] = {
+        "handlebars_template": ("handlebarsTemplate",),
+        "query_mode": ("query_mode",),
+        "columns": ("all_columns",),
+        "groupby": ("groupby",),
+        "metrics": ("metrics",),
+        "row_limit": ("row_limit",),
+        "order_desc": ("order_desc",),
+        "style_template": ("styleTemplate",),
+    }
 
     def pre_validate(
         self,
